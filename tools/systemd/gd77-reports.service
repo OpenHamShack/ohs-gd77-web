@@ -1,0 +1,10 @@
+# Fetches new GD-77 web CPS diagnostic reports and notifies once per report.
+# Install (user units, not done by the repository):
+#   cp tools/systemd/gd77-reports.* ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now gd77-reports.timer
+[Unit]
+Description=Fetch GD-77 web CPS diagnostic reports from openhamshack.com
+
+[Service]
+Type=oneshot
+ExecStart=%h/gd77-web/tools/fetch-reports.sh

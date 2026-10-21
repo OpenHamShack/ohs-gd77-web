@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GD-77 &amp; OpenGD77 CPS</title>
+<meta name="description" content="Read, edit and write codeplugs in the browser: Radioddity GD-77 on the stock firmware, and every radio running OpenGD77.">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>GD-77 &amp; OpenGD77 Codeplug Programmer</h1>
+    <span id="conn" class="pill off">No radio connected</span>
+  </div>
+  <div class="connect">
+    <button type="button" id="btn-stock" title="Radioddity stock firmware: USB HID">Connect stock</button>
+    <button type="button" id="btn-ogd" title="OpenGD77 firmware (GD-77, DM-1801, RD-5R, MD-UV380, MD-380, DM-1701, MD-2017, MD-9600): USB serial">Connect OpenGD77</button>
+    <button type="button" id="btn-disconnect">Disconnect</button>
+    <p id="no-usb" class="no-usb" hidden></p>
+    <button type="button" id="btn-help" class="link">Help</button>
+    <label class="sim">Simulator
+      <select id="sim">
+        <option value="">Off (real radio)</option>
+        <option value="stock">GD-77, stock firmware</option>
+        <option value="opengd77">GD-77, OpenGD77</option>
+        <option value="uv380">MD-UV380, OpenGD77</option>
+        <option value="uv380dfu">MD-UV380, firmware bootloader</option>
+      </select>
+    </label>
+  </div>
+</header>
+<div id="sim-banner" class="sim-banner" hidden></div>
+
+<section class="actions" aria-label="Radio and file actions">
+  <div class="group">
+    <button type="button" id="btn-read" class="primary">Read from radio</button>
+    <button type="button" id="btn-write" class="write">Write to radio<span class="badge">experimental — untested on real hardware</span></button>
+    <button type="button" id="btn-backup-again" hidden>Download backup again</button>
+    <button type="button" id="btn-report" class="report-open" hidden>Send diagnostic report…</button>
+  </div>
+  <div class="group">
+    <button type="button" id="btn-open">Open file…</button>
+    <input type="file" id="file-input" accept=".img,.g77,.gd77backup,.json" hidden>
+    <button type="button" id="btn-save">Save codeplug</button>
+    <button type="button" id="btn-save-g77" title="Save in the CPS .g77 format">Save as .g77</button>
+  </div>
+  <p id="write-why" class="muted why"></p>
+  <div class="progress-row"><progress id="progress" max="1" value="0" hidden></progress><span id="progress-text" hidden></span></div>
+  <p id="cp-info" class="cp-info"></p>
+  <p id="notice" class="notice" role="status" aria-live="polite"></p>
+</section>
+
+<nav id="tabs" class="tabs" role="tablist" aria-label="Codeplug sections"></nav>
+<main id="panel" class="panel"></main>
+
+<section class="log-box" aria-label="Log">
+  <div class="log-head"><h2>Log</h2><button type="button" id="log-clear" class="small">Clear</button></div>
+  <div id="log" class="log" role="log"></div>
+</section>
+
+<footer class="foot">
+  <p>Writing is experimental and has not been tested on a real radio. Keep the backup the read gives you.
+  Protocol details from dmrconfig, qdmr and ReallyOpenGD77 WebCPSd (MIT); see the README.</p>
+</footer>
+
+<!-- Getting started: shown on the welcome view and in the Help dialog.
+     Written for someone who has never used a CPS like this before. -->
+<template id="help-content">
+  <div class="help">
+    <h2>Getting started</h2>
+    <h3>1. Browser</h3>
+    <p>Use <strong>Chrome or Edge on a Windows, Mac or Linux computer</strong>.
+    Firefox, Safari, phones and tablets cannot talk to the radio.
+    On Windows 7 only an old Chrome (version 109) works; Windows 10 or 11 is better.</p>
+    <h3>2. Cable</h3>
+    <p>Use the radio's own programming lead: <strong>USB at one end, the 2-pin
+    K plug at the other, and no converter chip</strong>. A Baofeng-style
+    "USB Serial" cable (Prolific or CH340 chip) looks the same but will not work.</p>
+    <h3>3. Which button</h3>
+    <p>Plug in the cable and <strong>turn the radio on</strong>. Not sure which firmware
+    it has? Click <em>Connect stock</em>; if the radio is not in the list that
+    appears, cancel and click <em>Connect OpenGD77</em>. The button whose list
+    shows the radio is the right one.</p>
+    <h3>4. Drivers</h3>
+    <p>None needed on Windows 10/11 or Mac: the stock firmware is a plain USB
+    device and OpenGD77 appears as a serial port by itself. On Linux, let your
+    user reach the stock radio with this one line, then replug it:</p>
+    <pre>echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="15a2", ATTRS{idProduct}=="0073", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/70-gd77.rules && sudo udevadm control --reload</pre>
+    <p>(For OpenGD77 on Linux your user needs to be in the <code>dialout</code> group.)</p>
+    <h3>5. Safe first step</h3>
+    <p>Click <strong>Read from radio</strong> first. It saves a backup file to your
+    Downloads folder: keep it, it is how you get the radio back if anything goes wrong.
+    Writing is experimental: do your first write with someone who knows the radio.</p>
+    <h3>Stuck?</h3>
+    <p>Send us a diagnostic report: it shows exactly what it contains before anything is sent.
+    <button type="button" class="report-open">Send diagnostic report…</button></p>
+  </div>
+</template>
+
+<dialog id="help-dialog" class="help-dialog">
+  <form method="dialog">
+    <div id="help-body"></div>
+    <div class="dialog-buttons"><button value="ok" class="primary">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="report-dialog" class="report-dialog">
+  <form method="dialog">
+    <h2>Send a diagnostic report</h2>
+    <p>This sends the report below to openhamshack.com, <strong>including your whole codeplug</strong>:
+    callsign, DMR ID, channels and contacts. It is used only to diagnose and fix this programmer,
+    and deleted after 90 days.</p>
+    <p id="report-sim" class="muted" hidden>This report comes from a simulated radio and is marked as simulated.</p>
+    <div class="report-fields">
+      <label>Name (optional) <input type="text" id="report-name" autocomplete="name"></label>
+      <label>Email (optional, so we can reply) <input type="email" id="report-email" autocomplete="email"></label>
+      <label class="wide">What happened? (optional) <textarea id="report-message" rows="3"></textarea></label>
+    </div>
+    <h3>What is included</h3>
+    <ul id="report-sizes" class="report-sizes"></ul>
+    <details><summary>Show the full report</summary><textarea id="report-json" readonly rows="14" spellcheck="false"></textarea></details>
+    <p id="report-status" class="notice" role="status" aria-live="polite"></p>
+    <div class="dialog-buttons">
+      <button value="cancel">Close</button>
+      <button type="button" id="report-download">Download instead</button>
+      <button type="button" id="report-send" class="primary">Send report</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="write-dialog">
+  <form method="dialog">
+    <h2>Write to <span id="write-target"></span>?</h2>
+    <p class="warn-text"><strong>Experimental:</strong> this writer has only been tested against simulated radios, never real hardware.</p>
+    <p>If the write stops part way, the radio will hold a mix of old and new settings. You would then switch it off and on, read it, open your backup and write that back.</p>
+    <p>Your backup of this radio: <code id="write-backup"></code></p>
+    <label class="ack"><input type="checkbox" id="write-ack"> I have that backup file and accept the risk.</label>
+    <div class="dialog-buttons">
+      <button value="cancel" class="primary">Cancel</button>
+      <button value="write" id="write-go" class="danger">Write</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="error-dialog">
+  <form method="dialog">
+    <h2 id="error-title">Failed</h2>
+    <p id="error-message" class="error-text"></p>
+    <h3>What to do now</h3>
+    <ol id="error-steps"></ol>
+    <div class="dialog-buttons">
+      <button type="button" id="error-report" class="report-open">Send diagnostic report…</button>
+      <button type="button" id="error-backup">Download the backup again</button>
+      <button value="ok" class="primary">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import { init } from './js/app.js';
+init();
+if (new URLSearchParams(location.search).has('selftest')) import('./tests/browser/selftest.js');
+</script>
+</body>
+</html>

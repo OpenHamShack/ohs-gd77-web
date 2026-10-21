@@ -1,0 +1,12 @@
+# Deployed as public_html/gd77/.htaccess by tools/deploy.sh.
+# Scripts are ES modules imported by name, so without this a browser keeps
+# serving yesterday's js/ from its heuristic cache after a release (seen on
+# 21/10: the Firmware tab stayed missing through a hard refresh). no-cache
+# still lets it reuse a copy, but only after the ETag check says it's current.
+# Never add an HTTPS redirect here: the CDN reaches the origin over HTTP and a
+# redirect loops.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|js|mjs|css|json)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
